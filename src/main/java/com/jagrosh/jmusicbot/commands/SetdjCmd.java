@@ -16,8 +16,8 @@
 package com.jagrosh.jmusicbot.commands;
 
 import java.util.List;
-import com.jagrosh.jdautilities.commandclient.Command;
-import com.jagrosh.jdautilities.commandclient.CommandEvent;
+import com.jagrosh.jdautilities.command.Command;
+import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.utils.FinderUtil;
 import com.jagrosh.jmusicbot.utils.FormatUtil;
@@ -48,7 +48,7 @@ public class SetdjCmd extends Command {
         }
         else if(event.getArgs().equalsIgnoreCase("none"))
         {
-            bot.clearTextChannel(event.getGuild());
+            bot.clearRole(event.getGuild());
             event.reply(event.getClient().getSuccess()+" DJ role cleared; Only Admins can use the DJ commands.");
         }
         else

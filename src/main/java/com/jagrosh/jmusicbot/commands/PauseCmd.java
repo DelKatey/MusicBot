@@ -18,37 +18,33 @@ package com.jagrosh.jmusicbot.commands;
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
+import net.dv8tion.jda.core.entities.User;
 
 /**
  *
  * @author John Grosh <john.a.grosh@gmail.com>
  */
-public class ShuffleCmd extends MusicCommand {
+public class PauseCmd extends MusicCommand {
 
-    public ShuffleCmd(Bot bot)
+    public PauseCmd(Bot bot)
     {
         super(bot);
-        this.name = "shuffle";
-        this.help = "shuffles songs you have added";
-        this.beListening = true;
+        this.name = "pause";
+        this.help = "pauses the current song";
         this.bePlaying = true;
+        this.category = bot.DJ;
     }
 
     @Override
     public void doCommand(CommandEvent event) {
         AudioHandler handler = (AudioHandler)event.getGuild().getAudioManager().getSendingHandler();
-        int s = handler.getQueue().shuffle(event.getAuthor().getIdLong());
-        switch (s) {
-            case 0:
-                event.reply(event.getClient().getError()+" You don't have any music in the queue to shuffle!");
-                break;
-            case 1:
-                event.reply(event.getClient().getWarning()+" You only have one song in the queue!");
-                break;
-            default:
-                event.reply(event.getClient().getSuccess()+" You successfully shuffled your "+s+" entries.");
-                break;
+        if(handler.getPlayer().isPaused())
+        {
+            event.replyWarning("The player is already paused! Use `"+event.getClient().getPrefix()+"play` to unpause!");
+            return;
         }
+        handler.getPlayer().setPaused(true);
+        event.replySuccess("Paused **"+handler.getPlayer().getPlayingTrack().getInfo().title+"**. Type `"+event.getClient().getPrefix()+"play` to unpause!");
     }
     
 }

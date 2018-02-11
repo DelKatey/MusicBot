@@ -15,13 +15,12 @@
  */
 package com.jagrosh.jmusicbot.commands;
 
-import com.jagrosh.jdautilities.commandclient.CommandEvent;
+import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.QueuedTrack;
 import net.dv8tion.jda.core.Permission;
 import net.dv8tion.jda.core.entities.User;
-import net.dv8tion.jda.core.utils.PermissionUtil;
 
 /**
  *
@@ -45,16 +44,16 @@ public class RemoveCmd extends MusicCommand {
         AudioHandler handler = (AudioHandler)event.getGuild().getAudioManager().getSendingHandler();
         if(handler.getQueue().isEmpty())
         {
-            event.reply(event.getClient().getError()+" There is nothing in the queue!");
+            event.replyError("There is nothing in the queue!");
             return;
         }
         if(event.getArgs().equalsIgnoreCase("all"))
         {
-            int count = handler.getQueue().removeAll(event.getAuthor().getId());
+            int count = handler.getQueue().removeAll(event.getAuthor().getIdLong());
             if(count==0)
-                event.reply(event.getClient().getWarning()+" You don't have any songs in the queue!");
+                event.replyWarning("You don't have any songs in the queue!");
             else
-                event.reply(event.getClient().getSuccess()+" Successfully removed your "+count+" entries.");
+                event.replySuccess("Successfully removed your "+count+" entries.");
             return;
         }
         int pos;
@@ -65,28 +64,33 @@ public class RemoveCmd extends MusicCommand {
         }
         if(pos<1 || pos>handler.getQueue().size())
         {
-            event.reply(event.getClient().getError()+" Position must be a valid integer between 1 and "+handler.getQueue().size()+"!");
+            event.replyError("Position must be a valid integer between 1 and "+handler.getQueue().size()+"!");
             return;
         }
-        boolean isDJ = PermissionUtil.checkPermission(event.getGuild(), event.getMember(), Permission.MANAGE_SERVER);
+        boolean isDJ = event.getMember().hasPermission(Permission.MANAGE_SERVER);
         if(!isDJ)
             isDJ = event.getMember().getRoles().contains(event.getGuild().getRoleById(bot.getSettings(event.getGuild()).getRoleId()));
         QueuedTrack qt = handler.getQueue().get(pos-1);
-        if(qt.getIdentifier().equals(event.getAuthor().getId()))
+        if(qt.getIdentifier()==event.getAuthor().getIdLong())
         {
             handler.getQueue().remove(pos-1);
-            event.reply(event.getClient().getSuccess()+" Removed **"+qt.getTrack().getInfo().title+"** from the queue");
+            event.replySuccess("Removed **"+qt.getTrack().getInfo().title+"** from the queue");
         }
         else if(isDJ)
         {
             handler.getQueue().remove(pos-1);
-            User u = event.getJDA().getUserById(qt.getIdentifier());
-            event.reply(event.getClient().getSuccess()+" Removed **"+qt.getTrack().getInfo().title
+            User u;
+            try {
+                u = event.getJDA().getUserById(qt.getIdentifier());
+            } catch(Exception e) {
+                u = null;
+            }
+            event.replySuccess("Removed **"+qt.getTrack().getInfo().title
                     +"** from the queue (requested by "+(u==null ? "someone" : "**"+u.getName()+"**")+")");
         }
         else
         {
-            event.reply(event.getClient().getError()+" You cannot remove **"+qt.getTrack().getInfo().title+"** because you didn't add it!");
+            event.replyError("You cannot remove **"+qt.getTrack().getInfo().title+"** because you didn't add it!");
         }
     }
     

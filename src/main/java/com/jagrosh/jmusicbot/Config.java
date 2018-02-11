@@ -16,12 +16,15 @@
 package com.jagrosh.jmusicbot;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Scanner;
 import javax.swing.JOptionPane;
+import net.dv8tion.jda.core.OnlineStatus;
+import net.dv8tion.jda.core.entities.Game;
 
 /**
  *
@@ -29,21 +32,19 @@ import javax.swing.JOptionPane;
  */
 public class Config {
     private boolean nogui;
-    private String prefix;
-    private String token;
-    private String owner;
-    private String success;
-    private String warning;
-    private String error;
-    private String game;
-    private String help;
+    private String prefix, altprefix, token, owner, success, warning, error, game, 
+            help, loadingEmoji, searchingEmoji;
+    private boolean stay, dbots, songingame, useEval, npimages;
+    private long maxSeconds;
+    private OnlineStatus status = OnlineStatus.UNKNOWN;
     
     public Config(boolean nogui)
     {
         this.nogui = nogui;
         List<String> lines;
         try {
-            lines = Files.readAllLines(Paths.get("config.txt"));
+            lines = Files.readAllLines(Paths.get("config.txt"), StandardCharsets.UTF_8);
+            System.out.println("[INFO] Loading config: "+Paths.get("config.txt").toFile().getAbsolutePath());
             for(String line: lines)
             {
                 String[] parts = line.split("=",2);
@@ -57,6 +58,9 @@ public class Config {
                     case "prefix":
                         prefix = value;
                         break;
+                    case "altprefix":
+                        altprefix = value;
+                        break;
                     case "owner":
                         owner = value;
                         break;
@@ -69,11 +73,40 @@ public class Config {
                     case "error":
                         error = value;
                         break;
+                    case "loading":
+                        loadingEmoji = value;
+                        break;
+                    case "searching":
+                        searchingEmoji = value;
+                        break;
                     case "game":
                         game = value;
                         break;
                     case "help":
                         help = value;
+                        break;
+                    case "songinstatus":
+                        songingame = "true".equalsIgnoreCase(value);
+                        break;
+                    case "stayinchannel":
+                        stay = "true".equalsIgnoreCase(value);
+                        break;
+                    case "eval":
+                        useEval = "true".equalsIgnoreCase(value);
+                        break;
+                    case "dbots":
+                        dbots = "110373943822540800".equals(value);
+                        break;
+                    case "npimages":
+                        npimages = "true".equalsIgnoreCase(value);
+                        break;
+                    case "maxtime":
+                        try{
+                            maxSeconds = Long.parseLong(value);
+                        }catch(NumberFormatException e){}
+                        break;
+                    case "status":
+                        status = OnlineStatus.fromKey(value);
                         break;
                 }
             }
@@ -135,6 +168,11 @@ public class Config {
         return prefix;
     }
     
+    public String getAltPrefix()
+    {
+        return altprefix;
+    }
+    
     public String getToken()
     {
         return token;
@@ -160,9 +198,29 @@ public class Config {
         return error==null ? "\uD83D\uDEAB" : error;
     }
     
-    public String getGame()
+    public String getLoading()
     {
-        return game;
+        return loadingEmoji==null ? "\u231A" : loadingEmoji;
+    }
+    
+    public String getSearching()
+    {
+        return searchingEmoji==null ? "\uD83D\uDD0E" : searchingEmoji;
+    }
+    
+    public Game getGame()
+    {
+        if(game==null || game.isEmpty())
+            return null;
+        if(game.toLowerCase().startsWith("playing"))
+            return Game.playing(game.substring(7).trim());
+        if(game.toLowerCase().startsWith("listening to"))
+            return Game.listening(game.substring(12).trim());
+        if(game.toLowerCase().startsWith("listening"))
+            return Game.listening(game.substring(9).trim());
+        if(game.toLowerCase().startsWith("watching"))
+            return Game.watching(game.substring(8).trim());
+        return Game.playing(game);
     }
     
     public String getHelp()
@@ -173,6 +231,41 @@ public class Config {
     public boolean getNoGui()
     {
         return nogui;
+    }
+    
+    public boolean getStay()
+    {
+        return stay;
+    }
+    
+    public boolean getSongInStatus()
+    {
+        return songingame;
+    }
+    
+    public boolean getDBots()
+    {
+        return dbots;
+    }
+    
+    public boolean useEval()
+    {
+        return useEval;
+    }
+    
+    public boolean useNPImages()
+    {
+        return npimages;
+    }
+    
+    public long getMaxSeconds()
+    {
+        return maxSeconds;
+    }
+    
+    public OnlineStatus getStatus()
+    {
+        return status;
     }
     
     private void alert(String message)

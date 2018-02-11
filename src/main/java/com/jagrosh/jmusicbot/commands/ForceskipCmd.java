@@ -15,7 +15,7 @@
  */
 package com.jagrosh.jmusicbot.commands;
 
-import com.jagrosh.jdautilities.commandclient.CommandEvent;
+import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import net.dv8tion.jda.core.entities.User;
@@ -39,8 +39,8 @@ public class ForceskipCmd extends MusicCommand {
     @Override
     public void doCommand(CommandEvent event) {
         AudioHandler handler = (AudioHandler)event.getGuild().getAudioManager().getSendingHandler();
-        User u = event.getJDA().getUserById(handler.getCurrentTrack().getIdentifier());
-        event.reply(event.getClient().getSuccess()+" Skipped **"+handler.getCurrentTrack().getTrack().getInfo().title
+        User u = event.getJDA().getUserById(handler.getRequester());
+        event.reply(event.getClient().getSuccess()+" Skipped **"+handler.getPlayer().getPlayingTrack().getInfo().title
                 +"** (requested by "+(u==null ? "someone" : "**"+u.getName()+"**")+")");
         handler.getPlayer().stopTrack();
     }

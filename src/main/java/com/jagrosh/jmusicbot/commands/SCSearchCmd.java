@@ -21,9 +21,10 @@ import com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import java.util.concurrent.TimeUnit;
-import com.jagrosh.jdautilities.commandclient.CommandEvent;
-import com.jagrosh.jdautilities.menu.orderedmenu.OrderedMenuBuilder;
+import com.jagrosh.jdautilities.command.CommandEvent;
+import com.jagrosh.jdautilities.menu.OrderedMenu;
 import com.jagrosh.jmusicbot.Bot;
+import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.utils.FormatUtil;
 import net.dv8tion.jda.core.Permission;
 import net.dv8tion.jda.core.entities.Message;
@@ -34,17 +35,19 @@ import net.dv8tion.jda.core.entities.Message;
  */
 public class SCSearchCmd extends MusicCommand {
 
-    private final OrderedMenuBuilder builder;
-    public SCSearchCmd(Bot bot)
+    private final OrderedMenu.Builder builder;
+    private final String searchingEmoji;
+    public SCSearchCmd(Bot bot, String searchingEmoji)
     {
         super(bot);
+        this.searchingEmoji = searchingEmoji;
         this.name = "scsearch";
         this.arguments = "<query>";
         this.help = "searches Soundcloud for a provided query";
         this.beListening = true;
         this.bePlaying = false;
         this.botPermissions = new Permission[]{Permission.MESSAGE_EMBED_LINKS};
-        builder = new OrderedMenuBuilder()
+        builder = new OrderedMenu.Builder()
                 .allowTextInput(true)
                 .useNumbers()
                 .useCancelButton(true)
@@ -59,9 +62,7 @@ public class SCSearchCmd extends MusicCommand {
             event.reply(event.getClient().getError()+" Please include a query.");
             return;
         }
-        event.getChannel().sendMessage("\uD83D\uDD0E Searching... `["+event.getArgs()+"]`").queue(m -> {
-            bot.getAudioManager().loadItemOrdered(event.getGuild(), "scsearch:"+event.getArgs(), new ResultHandler(m,event));
-        });
+        event.reply(searchingEmoji+" Searching... `["+event.getArgs()+"]`",m -> bot.getAudioManager().loadItemOrdered(event.getGuild(), "scsearch:"+event.getArgs(), new ResultHandler(m,event)));
     }
     
     private class ResultHandler implements AudioLoadResultHandler {
@@ -75,25 +76,37 @@ public class SCSearchCmd extends MusicCommand {
         
         @Override
         public void trackLoaded(AudioTrack track) {
+            if(AudioHandler.isTooLong(track))
+            {
+                m.editMessage(FormatUtil.filter(event.getClient().getWarning()+" This track (**"+track.getInfo().title+"**) is longer than the allowed maximum: `"
+                        +FormatUtil.formatTime(track.getDuration())+"` > `"+FormatUtil.formatTime(AudioHandler.MAX_SECONDS*1000)+"`")).queue();
+                return;
+            }
             int pos = bot.queueTrack(event, track)+1;
-            m.editMessage(event.getClient().getSuccess()+" Added **"+track.getInfo().title
+            m.editMessage(FormatUtil.filter(event.getClient().getSuccess()+" Added **"+track.getInfo().title
                     +"** (`"+FormatUtil.formatTime(track.getDuration())+"`) "+(pos==0 ? "to begin playing" 
-                        : " to the queue at position "+pos)).queue();
+                        : " to the queue at position "+pos))).queue();
         }
 
         @Override
         public void playlistLoaded(AudioPlaylist playlist) {
             builder.setColor(event.getSelfMember().getColor())
-                    .setText(event.getClient().getSuccess()+" Search results for `"+event.getArgs()+"`:")
+                    .setText(FormatUtil.filter(event.getClient().getSuccess()+" Search results for `"+event.getArgs()+"`:"))
                     .setChoices(new String[0])
-                    .setAction(i -> {
+                    .setSelection((msg, i) -> {
                         AudioTrack track = playlist.getTracks().get(i-1);
+                        if(AudioHandler.isTooLong(track))
+                        {
+                            event.replyWarning("This track (**"+track.getInfo().title+"**) is longer than the allowed maximum: `"
+                                    +FormatUtil.formatTime(track.getDuration())+"` > `"+FormatUtil.formatTime(AudioHandler.MAX_SECONDS*1000)+"`");
+                            return;
+                        }
                         int pos = bot.queueTrack(event, track)+1;
-                        event.getChannel().sendMessage(event.getClient().getSuccess()+" Added **"+track.getInfo().title
+                        event.replySuccess("Added **"+track.getInfo().title
                                 +"** (`"+FormatUtil.formatTime(track.getDuration())+"`) "+(pos==0 ? "to begin playing" 
-                                    : " to the queue at position "+pos)).queue();
+                                    : " to the queue at position "+pos));
                     })
-                    .setCancel(() -> m.delete().queue())
+                    .setCancel((msg) -> {})
                     .setUsers(event.getAuthor())
                     ;
             for(int i=0; i<4&&i<playlist.getTracks().size(); i++)
@@ -107,7 +120,7 @@ public class SCSearchCmd extends MusicCommand {
 
         @Override
         public void noMatches() {
-            m.editMessage(event.getClient().getWarning()+" No results found for `"+event.getArgs()+"`.").queue();
+            m.editMessage(FormatUtil.filter(event.getClient().getWarning()+" No results found for `"+event.getArgs()+"`.")).queue();
         }
 
         @Override

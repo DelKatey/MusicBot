@@ -15,8 +15,8 @@
  */
 package com.jagrosh.jmusicbot.commands;
 
-import com.jagrosh.jdautilities.commandclient.Command;
-import com.jagrosh.jdautilities.commandclient.CommandEvent;
+import com.jagrosh.jdautilities.command.Command;
+import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.Settings;
 import net.dv8tion.jda.core.EmbedBuilder;
@@ -56,6 +56,7 @@ public class SettingsCmd extends Command {
                 .setDescription("Text Channel: "+(tchan==null ? "Any" : "**#"+tchan.getName()+"**")
                         + "\nVoice Channel: "+(vchan==null ? "Any" : "**"+vchan.getName()+"**")
                         + "\nDJ Role: "+(role==null ? "None" : "**"+role.getName()+"**")
+                        + "\nRepeat Mode: **"+(s.getRepeatMode() ? "On" : "Off")+"**"
                         + "\nDefault Playlist: "+(s.getDefaultPlaylist()==null ? "None" : "**"+s.getDefaultPlaylist()+"**")
                         )
                 .setFooter(event.getJDA().getGuilds().size()+" servers | "

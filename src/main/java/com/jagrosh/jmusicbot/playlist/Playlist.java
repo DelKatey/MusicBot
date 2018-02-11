@@ -5,6 +5,8 @@
  */
 package com.jagrosh.jmusicbot.playlist;
 
+import com.jagrosh.jmusicbot.Bot;
+import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
@@ -14,9 +16,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -29,14 +33,16 @@ public class Playlist {
     private final List<String> items;
     private List<AudioTrack> tracks;
     private List<PlaylistLoadError> errors;
+    private final boolean shuffle;
     
-    private Playlist(String name, List<String> items)
+    private Playlist(String name, List<String> items, boolean shuffle)
     {
         this.name = name;
         this.items = items;
+        this.shuffle = shuffle;
     }
     
-    public void loadTracks(AudioPlayerManager manager, Runnable callback)
+    public void loadTracks(AudioPlayerManager manager, Consumer<AudioTrack> consumer, Runnable callback)
     {
         if(tracks==null)
         {
@@ -49,34 +55,81 @@ public class Playlist {
                 manager.loadItemOrdered(name, items.get(i), new AudioLoadResultHandler() {
                     @Override
                     public void trackLoaded(AudioTrack at) {
-                        tracks.add(at);
-                        if(last && callback!=null)
-                            callback.run();
+                        if(AudioHandler.isTooLong(at))
+                            errors.add(new PlaylistLoadError(index, items.get(index), "This track is longer than the allowed maximum"));
+                        else
+                        {
+                            tracks.add(at);
+                            consumer.accept(at);
+                        }
+                        if(last)
+                        {
+                            if(callback!=null)
+                                callback.run();
+                        }
                     }
                     @Override
                     public void playlistLoaded(AudioPlaylist ap) {
                         if(ap.isSearchResult())
-                            tracks.add(ap.getTracks().get(0));
+                        {
+                            if(AudioHandler.isTooLong(ap.getTracks().get(0)))
+                                errors.add(new PlaylistLoadError(index, items.get(index), "This track is longer than the allowed maximum"));
+                            else
+                            {
+                                tracks.add(ap.getTracks().get(0));
+                                consumer.accept(ap.getTracks().get(0));
+                            }
+                        }
                         else if(ap.getSelectedTrack()!=null)
-                            tracks.add(ap.getSelectedTrack());
+                        {
+                            if(AudioHandler.isTooLong(ap.getSelectedTrack()))
+                                errors.add(new PlaylistLoadError(index, items.get(index), "This track is longer than the allowed maximum"));
+                            else
+                            {
+                                tracks.add(ap.getSelectedTrack());
+                                consumer.accept(ap.getSelectedTrack());
+                            }
+                        }
                         else
-                            tracks.addAll(ap.getTracks());
-                        if(last && callback!=null)
-                            callback.run();
+                        {
+                            List<AudioTrack> loaded = new ArrayList<>(ap.getTracks());
+                            if(shuffle)
+                                for(int first =0; first<loaded.size(); first++)
+                                {
+                                    int second = (int)(Math.random()*loaded.size());
+                                    AudioTrack tmp = loaded.get(first);
+                                    loaded.set(first, loaded.get(second));
+                                    loaded.set(second, tmp);
+                                }
+                            loaded.removeIf(track -> AudioHandler.isTooLong(track));
+                            tracks.addAll(loaded);
+                            loaded.forEach(at -> consumer.accept(at));
+                        }
+                        if(last)
+                        {
+                            if(callback!=null)
+                                callback.run();
+                        }
                     }
 
                     @Override
                     public void noMatches() {
                         errors.add(new PlaylistLoadError(index, items.get(index), "No matches found."));
-                        if(last && callback!=null)
-                            callback.run();
+                        if(last)
+                        {
+                            if(callback!=null)
+                                callback.run();
+                        }
                     }
 
                     @Override
                     public void loadFailed(FriendlyException fe) {
                         errors.add(new PlaylistLoadError(index, items.get(index), "Failed to load track: "+fe.getLocalizedMessage()));
-                        if(last && callback!=null)
-                            callback.run();
+                        if(last)
+                        {
+                            if(callback!=null)
+                                callback.run();
+                        }
                     }
                 });
             }
@@ -96,6 +149,20 @@ public class Playlist {
     public List<AudioTrack> getTracks()
     {
         return tracks;
+    }
+    
+    public void shuffleTracks()
+    {
+        if(tracks!=null)
+        {
+            for(int first =0; first<tracks.size(); first++)
+            {
+                int second = (int)(Math.random()*tracks.size());
+                AudioTrack tmp = tracks.get(first);
+                tracks.set(first, tracks.get(second));
+                tracks.set(second, tmp);
+            }
+        }
     }
     
     public List<PlaylistLoadError> getErrors()
@@ -138,11 +205,32 @@ public class Playlist {
         {
             if(folderExists())
             {
-                return new Playlist(name, Files.readAllLines(Paths.get("Playlists"+File.separator+name+".txt"))
-                        .stream()
-                        .map((str) -> str.trim())
-                        .filter((s) -> (!s.isEmpty() && !s.startsWith("#") && !s.startsWith("//")))
-                        .collect(Collectors.toList()));
+                boolean[] shuffle = {false};
+                List<String> list = new ArrayList<>();
+                Files.readAllLines(Paths.get("Playlists"+File.separator+name+".txt")).forEach(str -> {
+                    String s = str.trim();
+                    if(s.isEmpty())
+                        return;
+                    if(s.startsWith("#") || s.startsWith("//"))
+                    {
+                        s = s.replaceAll("\\s+", "");
+                        if(s.equalsIgnoreCase("#shuffle") || s.equalsIgnoreCase("//shuffle"))
+                            shuffle[0]=true;
+                    }
+                    else
+                        list.add(s);
+                });
+                if(shuffle[0])
+                {
+                    for(int first =0; first<list.size(); first++)
+                    {
+                        int second = (int)(Math.random()*list.size());
+                        String tmp = list.get(first);
+                        list.set(first, list.get(second));
+                        list.set(second, tmp);
+                    }
+                }
+                return new Playlist(name, list, shuffle[0]);
             }
             else
             {

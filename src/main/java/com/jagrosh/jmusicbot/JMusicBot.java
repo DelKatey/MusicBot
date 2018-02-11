@@ -17,10 +17,11 @@ package com.jagrosh.jmusicbot;
 
 import java.awt.Color;
 import javax.security.auth.login.LoginException;
-import com.jagrosh.jdautilities.commandclient.CommandClient;
-import com.jagrosh.jdautilities.commandclient.CommandClientBuilder;
-import com.jagrosh.jdautilities.commandclient.examples.*;
-import com.jagrosh.jdautilities.waiter.EventWaiter;
+import com.jagrosh.jdautilities.command.CommandClient;
+import com.jagrosh.jdautilities.command.CommandClientBuilder;
+import com.jagrosh.jdautilities.commons.waiter.EventWaiter;
+import com.jagrosh.jdautilities.examples.command.*;
+import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.commands.*;
 import com.jagrosh.jmusicbot.gui.GUI;
 import net.dv8tion.jda.core.AccountType;
@@ -28,8 +29,7 @@ import net.dv8tion.jda.core.JDABuilder;
 import net.dv8tion.jda.core.OnlineStatus;
 import net.dv8tion.jda.core.Permission;
 import net.dv8tion.jda.core.entities.Game;
-import net.dv8tion.jda.core.exceptions.RateLimitedException;
-import net.dv8tion.jda.core.utils.SimpleLog;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -55,36 +55,45 @@ public class JMusicBot {
         
         // set up the listener
         EventWaiter waiter = new EventWaiter();
-        Bot bot = new Bot(waiter);
+        Bot bot = new Bot(waiter, config);
         
-        AboutCommand.IS_AUTHOR = false;
-        
+        AboutCommand ab = new AboutCommand(Color.BLUE.brighter(),
+                                "a music bot that is [easy to host yourself!](https://github.com/jagrosh/MusicBot) (v0.1.2)",
+                                new String[]{"High-quality music playback", "FairQueue™ Technology", "Easy to host yourself"},
+                                RECOMMENDED_PERMS);
+        ab.setIsAuthor(false);
+        ab.setReplacementCharacter("\uD83C\uDFB6");
+        AudioHandler.STAY_IN_CHANNEL = config.getStay();
+        AudioHandler.SONG_IN_STATUS = config.getSongInStatus();
+        AudioHandler.MAX_SECONDS = config.getMaxSeconds();
+        AudioHandler.USE_NP_REFRESH = !config.useNPImages();
         // set up the command client
         
         CommandClientBuilder cb = new CommandClientBuilder()
                 .setPrefix(config.getPrefix())
+                .setAlternativePrefix(config.getAltPrefix())
                 .setOwnerId(config.getOwnerId())
                 .setEmojis(config.getSuccess(), config.getWarning(), config.getError())
                 .setHelpWord(config.getHelp())
+                .setLinkedCacheSize(200)
                 .addCommands(
-                        new AboutCommand(Color.BLUE.brighter(),
-                                "a music bot that is [easy to host yourself!](https://github.com/jagrosh/MusicBot)",
-                                new String[]{"High-quality music playback", "FairQueue™ Technology", "Easy to host yourself"},
-                                RECOMMENDED_PERMS),
+                        ab,
                         new PingCommand(),
                         new SettingsCmd(bot),
                         
                         new NowplayingCmd(bot),
-                        new PlayCmd(bot),
+                        new PlayCmd(bot, config.getLoading()),
                         new PlaylistsCmd(bot),
                         new QueueCmd(bot),
                         new RemoveCmd(bot),
-                        new SearchCmd(bot),
-                        new SCSearchCmd(bot),
+                        new SearchCmd(bot, config.getSearching()),
+                        new SCSearchCmd(bot, config.getSearching()),
                         new ShuffleCmd(bot),
                         new SkipCmd(bot),
                         
                         new ForceskipCmd(bot),
+                        new PauseCmd(bot),
+                        new RepeatCmd(bot),
                         new SkiptoCmd(bot),
                         new StopCmd(bot),
                         new VolumeCmd(bot),
@@ -94,16 +103,28 @@ public class JMusicBot {
                         new SetvcCmd(bot),
                         
                         //new GuildlistCommand(waiter),
+                        new AutoplaylistCmd(bot),
                         new PlaylistCmd(bot),
                         new SetavatarCmd(bot),
                         new SetgameCmd(bot),
                         new SetnameCmd(bot),
+                        new SetstatusCmd(bot),
                         new ShutdownCmd(bot)
                 );
+        if(config.useEval())
+            cb.addCommand(new EvalCmd(bot));
+        boolean nogame = false;
+        if(config.getStatus()!=OnlineStatus.UNKNOWN)
+            cb.setStatus(config.getStatus());
         if(config.getGame()==null)
             cb.useDefaultGame();
+        else if(config.getGame().getName().equalsIgnoreCase("none"))
+        {
+            cb.setGame(null);
+            nogame = true;
+        }
         else
-            cb.setGame(Game.of(config.getGame()));
+            cb.setGame(config.getGame());
         CommandClient client = cb.build();
         
         if(!config.getNoGui())
@@ -113,7 +134,7 @@ public class JMusicBot {
                 bot.setGUI(gui);
                 gui.init();
             } catch(Exception e) {
-                SimpleLog.getLog("Startup").fatal("Could not start GUI. If you are "
+                LoggerFactory.getLogger("Startup").error("Could not start GUI. If you are "
                         + "running on a server or in a location where you cannot display a "
                         + "window, please run in nogui mode using the -nogui flag.");
             }
@@ -124,14 +145,21 @@ public class JMusicBot {
             new JDABuilder(AccountType.BOT)
                     .setToken(config.getToken())
                     .setAudioEnabled(true)
-                    .setGame(Game.of("loading..."))
-                    .setStatus(OnlineStatus.DO_NOT_DISTURB)
-                    .addListener(client)
-                    .addListener(waiter)
-                    .addListener(bot)
+                    .setGame(nogame ? null : Game.playing("loading..."))
+                    .setStatus(config.getStatus()==OnlineStatus.INVISIBLE||config.getStatus()==OnlineStatus.OFFLINE ? OnlineStatus.INVISIBLE : OnlineStatus.DO_NOT_DISTURB)
+                    .addEventListener(client)
+                    .addEventListener(waiter)
+                    .addEventListener(bot)
                     .buildAsync();
-        } catch (LoginException | IllegalArgumentException | RateLimitedException ex) {
-            SimpleLog.getLog("Login").fatal(ex);
+        } catch (LoginException ex)
+        {
+            LoggerFactory.getLogger("Startup").error(ex+"\nPlease make sure you are "
+                    + "editing the correct config.txt file, and that you have used the "
+                    + "correct token (not the 'secret'!)");
+        }
+        catch(IllegalArgumentException ex)
+        {
+            LoggerFactory.getLogger("Startup").error(""+ex);
         }
     }
 }
